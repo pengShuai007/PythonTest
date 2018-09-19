@@ -52,7 +52,7 @@ def save_record():
                "CONVERT((SUM(COST) + SUM(CASH) + SUM(VOUCHER) + SUM(UNSETTLE_AMOUNT)),DECIMAL (9, 2)) TOTAL  " \
                "FROM asset_cost_record_detail GROUP BY ALI_UUID,ASSET_NO,COST_MONTH) a WHERE a.TOTAL > 0)   "
     cur.execute(save_sql)
-    # 将处理过的数据处理状态置为0
+    # 将处理过的数据处理状态置为1
     update_sql = " UPDATE asset_cost_record_detail SET IS_HANDLE = 1 WHERE IS_HANDLE = 0 "
     cur.execute(update_sql)
 

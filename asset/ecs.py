@@ -42,7 +42,7 @@ def save_data(info_list):
         ecsType = info.get('InstanceType')
         cpu = str(info.get('Cpu'))
         mem = str(info.get('Memory'))
-        bandWidth = str(info.get('InternetMaxBandwidthOut'));
+        bandWidth = str(info.get('InternetMaxBandwidthOut'))
         status = info.get('Status')
         if info.get('PublicIpAddress').get('IpAddress'):
             ipAddress = info.get('PublicIpAddress').get('IpAddress')
