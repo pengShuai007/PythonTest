@@ -1,5 +1,7 @@
 # coding=utf-8
 import time
+import datetime
+import json
 
 def yang():
     print ("/a")  # 响铃
@@ -30,7 +32,8 @@ def get_last_month():
     return last_month
 
 if __name__ == "__main__":
-    months = []
-    for month in months:
-        print month
+    str = [{"yang": '杨',"peng": 'pengshuai'}]
+    str_json = json.dumps(str, ensure_ascii=False)
+    print str_json
+
 

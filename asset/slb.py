@@ -5,16 +5,19 @@ from aliyunsdkslb.request.v20140515 import DescribeLoadBalancersRequest
 import json
 import pymysql
 import sys
+import math
+import datetime
 
-dbUser = sys.argv[1]
-dbPass = sys.argv[2]
-dbHost = sys.argv[3]
-dbName = sys.argv[4]
-accessKey = sys.argv[5]
-accessSecret = sys.argv[6]
-account = sys.argv[7].decode('gbk').encode('utf8')
+# dbUser = sys.argv[1]
+# dbPass = sys.argv[2]
+# dbHost = sys.argv[3]
+# dbName = sys.argv[4]
 
-sqlQuery = "SELECT * FROM asset_slb_info WHERE ASSET_NO = %s"
+UTC_FORMAT = "%Y-%m-%dT%H:%MZ"
+
+
+sqlQuery = "SELECT asset_no,region,slb_name,addr,addr_type,slb_status,network_type,bandwidth,create_time," \
+           "master_zone,slave_zone FROM asset_slb_info WHERE ASSET_NO = %s"
 
 sql = "INSERT INTO asset_slb_info (ASSET_NO,REGION,SLB_NAME,ADDR,ADDR_TYPE,SLB_STATUS,NETWORK_TYPE,BANDWIDTH," \
       "CREATE_TIME,MASTER_ZONE,SLAVE_ZONE) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
@@ -29,7 +32,18 @@ basicSql = "INSERT INTO asset_basic_info (ASSET_NO,ACCOUNT,ASSET_TYPE,CREATE_TIM
 
 updateBasicSql = "UPDATE asset_basic_info SET ACCOUNT = %s WHERE ASSET_NO = %s"
 
-def save_or_update_data(slb_info):
+
+class DateEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime.datetime):
+            return obj.strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(obj, date):
+            return obj.strftime("%Y-%m-%d")
+        else:
+            return json.JSONEncoder.default(self, obj)
+
+
+def save_or_update_data(slb_info, account):
     for info in slb_info:
         slb_no = info.get('LoadBalancerId')
         slb_name = info.get('LoadBalancerName')
@@ -39,7 +53,9 @@ def save_or_update_data(slb_info):
         region = info.get('RegionId')
         network_type = info.get('NetworkType')
         bandwidth = info.get('Bandwidth')
-        create_time = info.get('CreateTime')
+        create_time_utc = info.get('CreateTime')
+        if len(create_time_utc) > 0:
+            create_time = str(datetime.datetime.strptime(create_time_utc, UTC_FORMAT)).decode('utf-8')
         masterZone = info.get('MasterZoneId')
         slaveZone = info.get('SlaveZoneId')
 
@@ -47,19 +63,19 @@ def save_or_update_data(slb_info):
         cur.execute(sqlQuery, paramQuery)
         row = cur.fetchone()
         if row:
-            if row[2] != region or row[3] != slb_name or row[4] != slb_address or row[5] != address_type or row[
-                6] != slb_status or row[7] != network_type or row[8] != bandwidth or row[9] != create_time or row[
-                10] != masterZone or row[11] != slaveZone:
+            if row[1] != region or row[2] != slb_name or row[3] != slb_address or row[4] != address_type or \
+                            row[5] != slb_status or row[6] != network_type or row[7] != bandwidth or \
+                            row[8] != create_time or row[9] != masterZone or row[10] != slaveZone:
                 newJson = [{"assetNo": slb_no, "REGION": region, "SLB_NAME": slb_name, "ADDR": slb_address,
                             "ADDR_TYPE": address_type, "SLB_STATUS": slb_status, "NETWORK_TYPE": network_type,
                             "BANDWIDTH": bandwidth, "CREATE_TIME": create_time, "MASTER_ZONE": masterZone,
                             "SLAVE_ZONE": slaveZone}]
-                oldJson = [{"assetNo": row[1], "REGION": row[2], "SLB_NAME": row[3], "ADDR": row[4],
-                            "ADDR_TYPE": row[5], "SLB_STATUS": row[6], "NETWORK_TYPE": row[7],
-                            "BANDWIDTH": row[8], "CREATE_TIME": row[9], "MASTER_ZONE": row[10],
-                            "SLAVE_ZONE": row[11]}]
-                newJsonString = json.dumps(newJson, indent=2)
-                oldJsonString = json.dumps(oldJson, indent=2)
+                oldJson = [{"assetNo": row[0], "REGION": row[1], "SLB_NAME": row[2], "ADDR": row[3],
+                            "ADDR_TYPE": row[4], "SLB_STATUS": row[5], "NETWORK_TYPE": row[6],
+                            "BANDWIDTH": row[7], "CREATE_TIME": row[8], "MASTER_ZONE": row[9],
+                            "SLAVE_ZONE": row[10]}]
+                newJsonString = json.dumps(newJson, indent=2, cls=DateEncoder)
+                oldJsonString = json.dumps(oldJson, indent=2, cls=DateEncoder)
                 insertParams = [slb_no, oldJsonString, newJsonString]
                 cur.execute(insertSql, insertParams)
                 updateParams = [region, slb_name, slb_address, address_type, slb_status, network_type, bandwidth,
@@ -72,18 +88,14 @@ def save_or_update_data(slb_info):
                       create_time,
                       masterZone, slaveZone]
             cur.execute(sql, params)
-            basicParams = [slb_no,account]
+            basicParams = [slb_no, account]
             cur.execute(basicSql, basicParams)
-    conn.commit()
 
-if __name__ == '__main__':
-    conn = pymysql.connect(user=dbUser, passwd=dbPass,
-                           host=dbHost, db=dbName, use_unicode=True, charset="utf8")
-    cur = conn.cursor()
 
+def deal_data(access_key,access_secret,account):
     regions = ["cn-qingdao", "cn-hangzhou", "cn-beijing", "cn-shanghai", "cn-shenzhen", "cn-zhangjiakou"]
     for region in regions:
-        clt = client.AcsClient(accessKey, accessSecret, region)
+        clt = client.AcsClient(access_key, access_secret, region)
         request = DescribeLoadBalancersRequest.DescribeLoadBalancersRequest()
         request.set_accept_format('json')
         request.set_PageSize(100)
@@ -91,9 +103,10 @@ if __name__ == '__main__':
         response = json.loads(clt.do_action_with_exception(request), encoding='utf-8')
         slb_info = response.get('LoadBalancers').get('LoadBalancer')
         if slb_info:
-            save_or_update_data(slb_info)
             total = response.get('TotalCount')
-            num = int(round(total / 100.0))
+            print '同步slb----账号：'+ account + '；区域：' + region + "；总数：" + str(total)
+            save_or_update_data(slb_info, account)
+            num = int(math.ceil(total / 100.0))
             index = 1
             while index < num:
                 index = index + 1
@@ -104,6 +117,62 @@ if __name__ == '__main__':
                 # PageNumber, PageSize
                 response = json.loads(clt.do_action_with_exception(request), encoding='utf-8')
                 slb_info = response.get('LoadBalancers').get('LoadBalancer')
-                save_or_update_data(slb_info)
+                save_or_update_data(slb_info, account)
+
+def get_access():
+    get_sql = "SELECT ALI_UUID,ACCOUNT,KEYID,KEYSECRET FROM asset_account_info WHERE state = 1 "
+    cur.execute(get_sql)
+    data = cur.fetchall()
+    access_result = []
+    if data:
+        for row in data:
+            access_dict = {}
+            access_dict['ALI_UUID'] = row[0]
+            access_dict["ACCOUNT"] = row[1]
+            access_dict["ACCESS_KEY"] = row[2]
+            access_dict["ACCESS_SECRET"] = row[3]
+            access_result.append(access_dict)
+        return access_result
+
+def update_local():
+    account_str = ''
+    for account in account_list:
+        account_str += "'" + account + "'"
+    if len(account_str) > 0:
+        if account_str[-1] == ',':
+            account_str = account_str[: -1]
+        account_str = '(' + account_str + ')'
+    sql_local = 'SELECT asset_no FROM asset_basic_info where ASSET_TYPE = 2 AND ACCOUNT in ' + account_str
+    cur.execute(sql_local)
+    data = cur.fetchall()
+    update_instance = ''
+    if data:
+        for row in data:
+            asset_no = row[0]  # 数据库中已有的资产编号
+            if asset_no not in sync_instances:
+                update_instance += "'" + asset_no + "',"
+        if len(update_instance) > 0:
+            if update_instance[-1] == ',':
+                update_instance = update_instance[: -1]
+            update_instance = '(' + update_instance + ')'
+            update_sql = "UPDATE asset_basic_info SET ASSET_STATE = '3' WHERE asset_no IN " + update_instance
+            cur.execute(update_sql)
+
+if __name__ == '__main__':
+    conn = pymysql.connect(user=dbUser, passwd=dbPass,
+                           host=dbHost, db=dbName, use_unicode=True, charset="utf8")
+    cur = conn.cursor()
+    access_list = get_access()
+    sync_instances = []
+    account_list = []
+    for access in access_list:
+        ali_uuid = str(access.get('ALI_UUID'))
+        access_key = str(access.get('ACCESS_KEY'))
+        access_secret = str(access.get('ACCESS_SECRET'))
+        account = str(access.get('ACCOUNT'))
+        account_list.append(account)
+        deal_data(access_key.strip(), access_secret.strip(), account)
+    update_local()  # 如果本次同步不包含已经存在的资产，则更新资产状态为已释放
+    conn.commit()
     cur.close()
     conn.close()
