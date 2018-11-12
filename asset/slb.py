@@ -17,20 +17,19 @@ UTC_FORMAT = "%Y-%m-%dT%H:%MZ"
 
 
 sqlQuery = "SELECT asset_no,region,slb_name,addr,addr_type,slb_status,network_type,bandwidth,create_time," \
-           "master_zone,slave_zone FROM asset_slb_info WHERE ASSET_NO = %s"
+           "master_zone,slave_zone,resource_group_id FROM asset_slb_info WHERE ASSET_NO = %s"
 
 sql = "INSERT INTO asset_slb_info (ASSET_NO,REGION,SLB_NAME,ADDR,ADDR_TYPE,SLB_STATUS,NETWORK_TYPE,BANDWIDTH," \
-      "CREATE_TIME,MASTER_ZONE,SLAVE_ZONE) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+      "CREATE_TIME,MASTER_ZONE,SLAVE_ZONE,RESOURCE_GROUP_ID) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
 
 insertSql = "INSERT INTO asset_change_record (ASSET_NO,CHANGE_TPYE,OLD,NEW,CREATE_TIME) " \
             "VALUES (%s,'0',%s,%s,NOW())"
 
 updateSql = "UPDATE asset_slb_info SET REGION = %s,SLB_NAME = %s,ADDR = %s,ADDR_TYPE = %s,SLB_STATUS = %s," \
-            "NETWORK_TYPE = %s,BANDWIDTH = %s,CREATE_TIME = %s,MASTER_ZONE = %s,SLAVE_ZONE = %s WHERE ASSET_NO = %s"
+            "NETWORK_TYPE = %s,BANDWIDTH = %s,CREATE_TIME = %s,MASTER_ZONE = %s,SLAVE_ZONE = %s," \
+            "RESOURCE_GROUP_ID = %s WHERE ASSET_NO = %s"
 
 basicSql = "INSERT INTO asset_basic_info (ASSET_NO,ACCOUNT,ASSET_TYPE,CREATE_TIME) VALUES (%s,%s,'2',NOW())"
-
-updateBasicSql = "UPDATE asset_basic_info SET ACCOUNT = %s WHERE ASSET_NO = %s"
 
 
 class DateEncoder(json.JSONEncoder):
@@ -58,35 +57,33 @@ def save_or_update_data(slb_info, account):
             create_time = str(datetime.datetime.strptime(create_time_utc, UTC_FORMAT)).decode('utf-8')
         masterZone = info.get('MasterZoneId')
         slaveZone = info.get('SlaveZoneId')
-
+        resource_group_id = info.get('ResourceGroupId')
         paramQuery = [slb_no]
         cur.execute(sqlQuery, paramQuery)
         row = cur.fetchone()
         if row:
-            if row[1] != region or row[2] != slb_name or row[3] != slb_address or row[4] != address_type or \
-                            row[5] != slb_status or row[6] != network_type or row[7] != bandwidth or \
-                            row[8] != create_time or row[9] != masterZone or row[10] != slaveZone:
+            if row[1] != region or row[2] != slb_name or row[3] != slb_address or row[4] != address_type \
+                    or row[5] != slb_status or row[6] != network_type or row[7] != bandwidth or row[8] != create_time \
+                    or row[9] != masterZone or row[10] != slaveZone or row[11] != resource_group_id:
                 newJson = [{"assetNo": slb_no, "REGION": region, "SLB_NAME": slb_name, "ADDR": slb_address,
                             "ADDR_TYPE": address_type, "SLB_STATUS": slb_status, "NETWORK_TYPE": network_type,
                             "BANDWIDTH": bandwidth, "CREATE_TIME": create_time, "MASTER_ZONE": masterZone,
-                            "SLAVE_ZONE": slaveZone}]
+                            "SLAVE_ZONE": slaveZone, "RESOURCE_GROUP_ID": resource_group_id}]
                 oldJson = [{"assetNo": row[0], "REGION": row[1], "SLB_NAME": row[2], "ADDR": row[3],
                             "ADDR_TYPE": row[4], "SLB_STATUS": row[5], "NETWORK_TYPE": row[6],
                             "BANDWIDTH": row[7], "CREATE_TIME": row[8], "MASTER_ZONE": row[9],
-                            "SLAVE_ZONE": row[10]}]
+                            "SLAVE_ZONE": row[10], "RESOURCE_GROUP_ID": row[11]}]
                 newJsonString = json.dumps(newJson, indent=2, cls=DateEncoder)
                 oldJsonString = json.dumps(oldJson, indent=2, cls=DateEncoder)
                 insertParams = [slb_no, oldJsonString, newJsonString]
                 cur.execute(insertSql, insertParams)
                 updateParams = [region, slb_name, slb_address, address_type, slb_status, network_type, bandwidth,
-                                create_time, masterZone, slaveZone, slb_no]
+                                create_time, masterZone, slaveZone, resource_group_id, slb_no]
                 cur.execute(updateSql, updateParams)
-            update_basic = [account, slb_no]
-            cur.execute(updateBasicSql, update_basic)
         else:
             params = [slb_no, region, slb_name, slb_address, address_type, slb_status, network_type, bandwidth,
                       create_time,
-                      masterZone, slaveZone]
+                      masterZone, slaveZone, resource_group_id]
             cur.execute(sql, params)
             basicParams = [slb_no, account]
             cur.execute(basicSql, basicParams)

@@ -17,7 +17,6 @@ import datetime
 # dbHost = sys.argv[3]
 # dbName = sys.argv[4]
 
-
 '''
 获取资产消费信息，即什么时候花钱
 '''
@@ -145,8 +144,9 @@ def get_between_month(begin_date,end_date):
 def get_months():
     begin_month = '2018-01'
     last_month = get_last_month()
-    get_sql = 'select billing_cycle from asset_consume_info order by billing_cycle desc limit 1 '
-    cur.execute(get_sql)
+    get_sql = 'select billing_cycle from asset_consume_info where ali_uuid = %s order by billing_cycle desc limit 1 '
+    query_params = [ali_uuid]
+    cur.execute(get_sql, query_params)
     row = cur.fetchone()
     if row:
         begin_month = row[0]  # 数据库查出来的月份，不能包括这个月
@@ -189,15 +189,16 @@ if __name__ == '__main__':
     conn = pymysql.connect(user=dbUser, passwd=dbPass,
                            host=dbHost, db=dbName, use_unicode=True, charset="utf8")
     cur = conn.cursor()
-    month_list = get_months()
-    for month in month_list:
-        access_list = get_access()
-        for access in access_list:
-            ali_uuid = str(access.get('ALI_UUID'))
-            access_key = str(access.get('ACCESS_KEY'))
-            access_secret = str(access.get('ACCESS_SECRET'))
+
+    access_list = get_access()
+    for access in access_list:
+        ali_uuid = str(access.get('ALI_UUID'))
+        access_key = str(access.get('ACCESS_KEY'))
+        access_secret = str(access.get('ACCESS_SECRET'))
+        month_list = get_months()
+        for month in month_list:
             deal_data(ali_uuid, access_key.strip(), access_secret.strip(), month)
-    # 每个月每个账号的明细数据插入以后再提交
+    # 每个账号每个月的明细数据插入以后再提交
     conn.commit()
     cur.close()
     conn.close()
